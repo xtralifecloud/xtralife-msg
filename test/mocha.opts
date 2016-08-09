@@ -1,0 +1,3 @@
+--reporter Spec
+--ui bdd
+--require coffee-script/register
