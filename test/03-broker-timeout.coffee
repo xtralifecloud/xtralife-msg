@@ -19,7 +19,7 @@ describe "Broker Timeout", ->
 	this.timeout(200)
 
 	before 'needs a broker instance', (done)->
-		broker = new Broker "testTimeout",  Redis.createClient(), Redis.createClient(), toHandler, 5, 10 # check every 5ms, timeout after 10ms !
+		broker = new Broker "testTimeout",  Redis.createClient(), Redis.createClient(), toHandler, 1000, 1000 # check every 5ms, timeout after 10ms !
 		broker.ready.then ->
 			done()
 
@@ -95,11 +95,11 @@ describe "Broker Timeout", ->
 							count.should.eql(0)
 							done()
 			.done()
-		, 100
+		, 3000
 		return null
 
 	it 'should timeout without ACK, even after receive', (done)->
-		this.timeout 2000
+		this.timeout 4000
 		broker.send("timeoutuser", {msg: "oktimeout"}).done()
 
 		broker.receive("timeoutuser")
@@ -111,7 +111,7 @@ describe "Broker Timeout", ->
 				broker.ack("timeoutuser", message.id).then ->
 					done()
 				.done()
-			, 1000
+			, 3000
 		.done()
 
 	after 'check we left no message in the queue', (done)->
