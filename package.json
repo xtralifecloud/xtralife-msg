@@ -7,9 +7,6 @@
   "engines": {
     "node": ">=6.2.2"
   },
-  "publishConfig": {
-    "registry": "http://npm.clanofthecloud.com:4873/"
-  },
   "main": "src/index.coffee",
   "repository": {
     "type": "git",
