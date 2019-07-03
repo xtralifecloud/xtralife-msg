@@ -1,3 +1,2 @@
---reporter Spec
 --ui bdd
---require coffee-script/register
+--require coffeescript/register

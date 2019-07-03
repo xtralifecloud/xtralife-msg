@@ -1,14 +1,15 @@
 Promise = require 'bluebird'
 
-uuid = require 'node-uuid'
+uuidv4 = require 'uuid/v4'
 
 LocalBroker = require './LocalBroker.coffee'
 
 # TODO OSS : redis is actually promisified in xtralife... we could use promises instead of ugly defer
 
 class Broker extends LocalBroker
-	constructor: (@prefix, @redis, @pubsub, @key = "Broker:channel-" + @prefix)->
+	constructor: (@prefix, @redis, @pubsub, @key = null)->
 		super()
+		unless @key? then @key = "Broker:channel-" + @prefix
 		@ready = @_receiveFromPubSub() # @ready is a promise which will be resolved when the redis subscribe is OK
 
 		@stats.sent = 0
@@ -22,7 +23,7 @@ class Broker extends LocalBroker
 	# returns : a promise
 	# note : a .id field is added to the message with the message id
 	send: (user, message)->
-		message.id = uuid.v4({rng:uuid.nodeRNG})
+		message.id = uuidv4()
 
 		@stats.sent++
 		@stats.sentGauge++

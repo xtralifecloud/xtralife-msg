@@ -1,5 +1,6 @@
 Promise = require 'bluebird'
-uuid = require 'node-uuid'
+
+uuidv4 = require 'uuid/v4'
 
 class LocalBroker
 	constructor: ()->
@@ -27,7 +28,7 @@ class LocalBroker
 		@stats.localDispatch = 0
 
 	_getPromiseId: ()->
-		uuid.v4({rng:uuid.nodeRNG})
+		uuidv4()
 
 	_localCancelReceive: (user, id)->
 		if @_hasDispatch(user)

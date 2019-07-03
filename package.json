@@ -13,11 +13,11 @@
     "url": "https://github.com/xtralifecloud/xtralife-msg.git"
   },
   "dependencies": {
-    "coffee-script": "*",
+    "coffeescript": "*",
     "coffee-script-mapped": "*",
     "redis": "*",
     "bluebird": "*",
-    "node-uuid": "*"
+    "uuid": "*"
   },
   "devDependencies": {
     "mocha": "*",

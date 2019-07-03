@@ -5,8 +5,13 @@ Broker = require './NormalBroker.coffee'
 # TODO OSS : redis is actually promisified in xtralife... we could use promises instead of ugly defer
 
 class TimeoutBroker extends Broker
-	constructor: (@prefix, @redis, @pubsub, @timeoutHandler, @checkInterval=15000, @ackTimeout=15000, @key = "Broker:channel-" + @prefix)->
-		super(@prefix, @redis, @pubsub, @key)
+	constructor: (prefix, redis, pubsub, @timeoutHandler, @checkInterval=15000, @ackTimeout=15000, key)->
+		unless key? then key = "Broker:channel-" + prefix
+		super(prefix, redis, pubsub, key)
+		@prefix = prefix
+		@key = key
+		@redis = redis
+		@pubsub = pubsub
 
 		@timeoutsKey = "broker:#{@prefix}:timeouts"
 		@lastTimeoutKey = "broker:#{@prefix}:lasttimeout"
