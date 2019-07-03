@@ -48,32 +48,28 @@ class TimeoutBroker extends Broker
 		def.promise
 
 	_checkAckTimeouts: (cb)->
-
-		@redis.setnx @_timeoutLock(), Date.now(), (err, result)=>
+		expiry = Math.round(@checkInterval/1000)
+		@redis.set @_timeoutLock(), Date.now(), "NX", "EX", expiry, (err, result)=>
 			if err? then return cb(err)
-			if result is 1
+			if result is 'OK'
 				# we've grabbed the lock
-				expiry = Math.round(@checkInterval/1000)
-				@redis.expire @_timeoutLock(), expiry, (err)=>
+				@redis.get @lastTimeoutKey, (err, lasttimeout)=>
 					if err? then return cb(err)
+					unless lasttimeout? then lasttimeout = "-inf"
 
-					@redis.get @lastTimeoutKey, (err, lasttimeout)=>
-						if err? then return cb(err)
-						unless lasttimeout? then lasttimeout = "-inf"
+					now = Date.now()
+					return cb(null, null) if lasttimeout != "-inf" and now < lasttimeout
+					@redis.zrangebyscore @timeoutsKey, lasttimeout, "("+now, (err, users)=>
+						return cb(err) if err?
 
-						now = Date.now()
-						return cb(null, null) if lasttimeout != "-inf" and now < lasttimeout
-						@redis.zrangebyscore @timeoutsKey, lasttimeout, "("+now, (err, users)=>
-							return cb(err) if err?
-
-							@redis.set @lastTimeoutKey, now, (err)=>
-								if err? then return cb(err)
-							if users.length == 0
-								cb(null, [])
-							else
-								@stats.timedout+=users.length
-								@_timeout(user, @timeoutHandler) for user in users # should be done in the tx instead
-								cb(err, users)
+						@redis.set @lastTimeoutKey, now, (err)=>
+							if err? then return cb(err)
+						if users.length == 0
+							cb(null, [])
+						else
+							@stats.timedout+=users.length
+							@_timeout(user, @timeoutHandler) for user in users # should be done in the tx instead
+							cb(err, users)
 
 	_timeout: (user, timeoutHandler)->
 
