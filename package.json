@@ -3,30 +3,33 @@
   "description": "Xtralife-msg is a distributed message bus",
   "version": "3.2.4",
   "author": "devteam <devteam@xtralife.cloud>",
-  "license": "(C) Xtralife.cloud, 2015",
+  "license": "(C) Xtralife.cloud, 2020",
   "engines": {
-    "node": ">=6.2.2"
+    "node": ">=v10.18.1"
   },
-  "main": "src/index.coffee",
+  "main": "src/index.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/xtralifecloud/xtralife-msg.git"
   },
   "dependencies": {
-    "coffeescript": "*",
-    "coffee-script-mapped": "*",
-    "redis": "*",
-    "bluebird": "*",
-    "uuid": "^3.3.2"
+    "uuid": "^8.1.0"
   },
   "devDependencies": {
+    "@types/mocha": "*",
+    "bluebird": "*",
     "mocha": "*",
+    "redis": "*",
     "should": "*",
-    "consul": "*",
+    "winston": "*"
+  },
+  "peerDependencies": {
+    "bluebird": "*",
+    "redis": "*",
     "winston": "*"
   },
   "readmeFilename": "Readme.md",
   "scripts": {
-    "test": "mocha test/*.coffee"
+    "test": "mocha test/*.js"
   }
 }
