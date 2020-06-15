@@ -1,7 +1,7 @@
 {
   "name": "xtralife-msg",
   "description": "Xtralife-msg is a distributed message bus",
-  "version": "3.3.0",
+  "version": "4.0.0-alpha",
   "author": "devteam <devteam@xtralife.cloud>",
   "license": "(C) Xtralife.cloud, 2020",
   "engines": {
