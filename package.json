@@ -7,26 +7,23 @@
   "engines": {
     "node": ">=6.2.2"
   },
-  "main": "src/index.coffee",
+  "main": "src/index.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/xtralifecloud/xtralife-msg.git"
   },
   "dependencies": {
-    "coffeescript": "*",
-    "coffee-script-mapped": "*",
-    "redis": "*",
-    "bluebird": "*",
-    "uuid": "^3.3.2"
+    "bluebird": "^3.7.2",
+    "redis": "^3.1.2",
+    "uuid": "^8.3.2"
   },
   "devDependencies": {
-    "mocha": "*",
-    "should": "*",
-    "consul": "*",
-    "winston": "*"
+    "mocha": "^9.1.1",
+    "should": "^13.2.3",
+    "winston": "^3.3.3"
   },
   "readmeFilename": "Readme.md",
   "scripts": {
-    "test": "mocha test/*.coffee"
+    "test": "mocha test/*.js"
   }
 }
