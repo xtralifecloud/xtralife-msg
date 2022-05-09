@@ -10,8 +10,6 @@ const Promise = require('bluebird');
 
 const Broker = require('./NormalBroker.js');
 
-// TODO OSS : redis is actually promisified in xtralife... we could use promises instead of ugly defer
-
 class TimeoutBroker extends Broker {
 	constructor(prefix, redis, pubsub, timeoutHandler, checkInterval, ackTimeout, key){
 		super(prefix, redis, pubsub, key);
@@ -55,20 +53,24 @@ class TimeoutBroker extends Broker {
 	_addTimeout(user){
 		const timeout = new Date().getTime() + this.ackTimeout;
 
-		const def = Promise.defer();
-		this.redis.zadd(this.timeoutsKey, timeout, user, function(err, data){
-			if (err != null) { return def.reject(err); } else { return def.resolve(data); }
+		return new Promise((resolve, reject)=> {
+			this.redis.zadd(this.timeoutsKey, timeout, user, function (err, data) {
+				if (err != null) {
+					return reject(err);
+				} else {
+					return resolve(data);
+				}
+			})
 		});
-		return def.promise;
 	}
 
-	_clearTimeout(user){
 
-		const def = Promise.defer();
-		this.redis.zrem(this.timeoutsKey, user, function(err, data){
-			if (err != null) { return def.reject(err); } else { return def.resolve(data); }
-		});
-		return def.promise;
+	_clearTimeout(user){
+		return new Promise((resolve, reject) => {
+			this.redis.zrem(this.timeoutsKey, user, function(err, data){
+				if (err != null) { return reject(err); } else { return resolve(data); }
+			});
+		})
 	}
 
 	_checkAckTimeouts(cb){
@@ -106,35 +108,31 @@ class TimeoutBroker extends Broker {
 
 		const _prefix = this.prefix;
 		const _getMessages = ()=> {
-			const def = Promise.defer();
-
-			this.redis.lrange(this._messageQueue(user), 0, -1, function(err, data){
-				if (err != null) { return def.reject(err); } else { return def.resolve(data); }
-			});
-			return def.promise;
+			return new Promise((resolve, reject) => {
+				this.redis.lrange(this._messageQueue(user), 0, -1, function(err, data){
+					if (err != null) { return reject(err); } else { return resolve(data); }
+				});
+			})
 		};
 
 		const _pushMessages = messages=> {
 			if (messages.length === 0) { return Promise.resolve(); }
-			const def = Promise.defer();
 			const args = [this._timedoutQueue(user)];
 			for (let message of Array.from(messages)) { args.push(message); }
-			// @ts-ignore
-			args.push(function(err, data){
-				if (err != null) { return def.reject(err); } else { return def.resolve(data); }
-			});
-
-			this.redis.rpush.apply(this.redis, args);
-
-			return def.promise;
+			return new Promise((resolve, reject) => {
+				args.push(function(err, data){
+					if (err != null) { return reject(err); } else { return resolve(data); }
+				});
+				this.redis.rpush.apply(this.redis, args);
+			})
 		};
 
 		const _removeMessages = count=> {
-			const def = Promise.defer();
-			this.redis.ltrim(this._messageQueue(user), 0, -(count+1), function(err, data){
-				if (err != null) { return def.reject(err); } else { return def.resolve(data); }
-			});
-			return def.promise;
+			return new Promise((resolve, reject) => {
+				this.redis.ltrim(this._messageQueue(user), 0, -(count+1), function(err, data){
+					if (err != null) { return reject(err); } else { return resolve(data); }
+				});
+			})
 		};
 
 
@@ -152,26 +150,33 @@ class TimeoutBroker extends Broker {
 	// get the message queue length for an array of users, returns a promise for array of {user, count}
 	timedoutStats(users){
 		const multi = this.redis.multi(); // pipeline all requests
-		const def = Promise.defer();
-
 		for (let each of Array.from(users)) { multi.llen(this._timedoutQueue(each)); }
-		multi.exec(function(err, data){
-			if (err != null) { return def.reject(err); } else { return def.resolve(data); }
-		});
 
-		return def.promise;
+		return new Promise((resolve, reject) => {
+			multi.exec(function (err, data) {
+				if (err != null) {
+					return reject(err);
+				} else {
+					return resolve(data);
+				}
+			})
+		});
 	}
 
 	_countTimedoutMessages(user, redis){
 		if (redis == null) { ({
             redis
         } = this); }
-		const def = Promise.defer();
-		redis.llen(this._timedoutQueue(user), function(err, data){
-			if (err != null) { return def.reject(err); } else { return def.resolve(data); }
-		});
 
-		return def.promise;
+		return new Promise((resolve, reject) => {
+			redis.llen(this._timedoutQueue(user), function(err, data){
+				if (err != null) {
+					return reject(err);
+				} else {
+					return resolve(data);
+				}
+			})
+		});
 	}
 
 	_countPendingMessages(user, redis){
@@ -188,11 +193,16 @@ class TimeoutBroker extends Broker {
 	_peekMessage(user){
 
 		const _lrange = ()=> {
-			const def = Promise.defer();
-			this.redis.lrange(this._timedoutQueue(user), 0, 0, function(err, data){
-				if (err != null) { return def.reject(err); } else { return def.resolve(data); }
+
+			return new Promise((resolve, reject) => {
+				this.redis.lrange(this._timedoutQueue(user), 0, 0, function (err, data) {
+					if (err != null) {
+						return reject(err);
+					} else {
+						return resolve(data);
+					}
+				})
 			});
-			return def.promise;
 		};
 
 		return _lrange()
@@ -204,11 +214,16 @@ class TimeoutBroker extends Broker {
 
 	_popMessage(user){
 		const _lpop = ()=> {
-			const def = Promise.defer();
-			this.redis.lpop(this._timedoutQueue(user), function(err, data){
-				if (err != null) { return def.reject(err); } else { return def.resolve(data); }
+
+			return new Promise((resolve, reject) => {
+				this.redis.lpop(this._timedoutQueue(user), function (err, data) {
+					if (err != null) {
+						return reject(err);
+					} else {
+						return resolve(data);
+					}
+				})
 			});
-			return def.promise;
 		};
 
 		return _lpop().then(res=> {

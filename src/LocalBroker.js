@@ -21,7 +21,7 @@ class LocalBroker {
 	// we add a promise to _dispatch, so we can later resolve it, or reject it, or timeout
 	// for each user, we will store an array of promises, each with its own id (used to cancel)
 	receive(user, id = null){
-		const deferred = Promise.defer();
+		const deferred = this._defer();
 		// @ts-ignore
 		deferred.promise.id = (id == null) ? this._getPromiseId() : id;
 
@@ -88,6 +88,19 @@ class LocalBroker {
 			this.stats.ccu--;
 			return this.stats.ccuGauge--;
 		}
+	}
+
+	_defer() {
+		let resolve, reject;
+		const promise = new Promise(function() {
+			resolve = arguments[0];
+			reject = arguments[1];
+		});
+		return {
+			resolve: resolve,
+			reject: reject,
+			promise: promise
+		};
 	}
 }
 
