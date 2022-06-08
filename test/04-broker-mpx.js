@@ -20,14 +20,28 @@ const toHandler = function(prefix, user, message){
 
 let broker = null;
 // @ts-ignore
-global.logger = require('winston');
+const winston = require('winston')
+const { TimeoutBroker: Broker } = require("../src");
+global.logger = winston.createLogger({
+	level: 'info',
+	format: winston.format.json(),
+	transports: [
+		new winston.transports.Console(),
+	]
+});
 
 describe("Broker Multiplexed", function() {
 	this.timeout(2000);
 
-	before('needs a broker instance', function(){
-		broker = new BrokerMpx(Redis.createClient(), Redis.createClient(), toHandler, 50, 100); // check every 5ms, timeout after 10ms !
-		return broker.ready;
+	before('needs a broker instance', async function(){
+		const redis = Redis.createClient();
+		const pubsub = redis.duplicate();
+
+		await redis.connect();
+		await pubsub.connect();
+
+		broker = new BrokerMpx(redis, pubsub, toHandler, 50, 100); // check every 5ms, timeout after 10ms !
+		return broker.ready
 	});
 
 	it('should receive then send', function(done){

@@ -13,19 +13,18 @@
     "url": "https://github.com/xtralifecloud/xtralife-msg.git"
   },
   "dependencies": {
+    "redis": "^4.1.0",
     "uuid": "^8.1.0"
   },
   "devDependencies": {
     "@types/mocha": "*",
     "bluebird": "*",
     "mocha": "*",
-    "redis": "*",
     "should": "*",
     "winston": "*"
   },
   "peerDependencies": {
     "bluebird": "*",
-    "redis": "*",
     "winston": "*"
   },
   "readmeFilename": "Readme.md",

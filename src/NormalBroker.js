@@ -57,7 +57,7 @@ class Broker extends LocalBroker {
                 return this._peekMessage(user).then(JSON.parse); // then resolve to that pending message
             } else {
                 // @ts-ignore
-                return Broker.prototype.__proto__.receive.call(this, user, id);
+                return super.receive(user, id);
             }
         }); // else use local receive to wait until a message arrives
         // @ts-ignore
@@ -79,14 +79,14 @@ class Broker extends LocalBroker {
                 }
             })
             .then(JSON.parse)
-            .then(message => { // peek message
+            .then(async message => { // peek message
                 if ((message != null) && (id != null) && (message.id !== id)) {
                     return message; // if we try to ack the wrong message, should be Q.reject() instead ?
                 } else {
                     if (message != null) {
                         this.stats.acked++;
                         this.stats.ackedGauge++;
-                        return this._popMessage(user).then(JSON.parse);
+                        return await this._popMessage(user).then(JSON.parse);
                     } else {
                         return null;
                     }
@@ -97,39 +97,19 @@ class Broker extends LocalBroker {
     // cancel a receive call
     // user : the user id
     // id : the promise.id from the promise returned by receive
-    cancelReceive(user, id) {
+    async cancelReceive(user, id) {
         // distribute the cancel among all brokers
-        return this.redis.publish(this.key, JSON.stringify({type: "cancel", user, id}));
+        return await this.redis.publish(this.key, JSON.stringify({type: "cancel", user, id}));
     }
 
     // get the message queue length for an array of users, returns a promise for array of integers, in the same order
-    pendingStats(users) {
+    async pendingStats(users) {
         const multi = this.redis.multi(); // pipeline all requests
 
         for (let user of Array.from(users)) {
-            multi.llen(this._messageQueue(user));
+            multi.LLEN(this._messageQueue(user));
         }
-        return new Promise((resolve, reject) => {
-            multi.exec(function (err, data) {
-                if (err != null) {
-                    return reject(err);
-                } else {
-                    return resolve(data);
-                }
-            })
-        });
-    }
-
-    _llen(red, key) {
-        return new Promise((resolve, reject) => {
-            red.llen(key, function (err, data) {
-                if (err != null) {
-                    return reject(err);
-                } else {
-                    return resolve(data);
-                }
-            })
-        });
+        return await multi.exec();
     }
 
     _resetStats() {
@@ -142,85 +122,65 @@ class Broker extends LocalBroker {
         return `broker:${this.prefix}:user:${user}`; // TODO OSS: allow ("broker") configuration instead of hardcoding
     }
 
-    _saveMessage(user, message) {
-        // TODO OSS : expire queues
-        return new Promise((resolve, reject) => {
-            this.redis.rpush(this._messageQueue(user), JSON.stringify(message), function (err, data) {
-                if (err != null) {
-                    return reject(err);
-                } else {
-                    return resolve(data);
-                }
-            });
-        })
+    async _saveMessage(user, message) {
+        return await this.redis.RPUSH(this._messageQueue(user), JSON.stringify(message)).catch(err => console.log(err));
     }
 
-    _publishMessage(user, message) {
-        return new Promise((resolve, reject) => {
-            this.redis.publish(this.key, JSON.stringify({
-                type: 'dispatch',
-                user,
-                body: message
-            }), function (err, data) {
-                if (err != null) {
-                    return reject(err);
-                } else {
-                    return resolve(data);
-                }
-            })
-        });
+    async _publishMessage(user, message) {
+       return await this.redis.publish(this.key, JSON.stringify({
+            type: 'dispatch',
+            user,
+            body: message
+        }))
     }
 
-    _countPendingMessages(user, redis) {
+    async _countPendingMessages(user, redis) {
         if (redis == null) {
             ({
                 redis
             } = this);
         }
-        return new Promise((resolve, reject) => {
-            redis.llen(this._messageQueue(user), function (err, data) {
-                if (err != null) {
-                    return reject(err);
-                } else {
-                    return resolve(data);
-                }
-            })
-        });
+
+        return await redis.LLEN(this._messageQueue(user));
     }
 
-    _peekMessage(user) {
-        return new Promise((resolve, reject) => {
-            this.redis.lrange(this._messageQueue(user), 0, 0, function (err, data) {
-                if (err != null) {
-                    return reject(err);
-                } else {
-                    return resolve(data);
-                }
-            })
-        });
+    async _peekMessage(user) {
+        return await this.redis.LRANGE(this._messageQueue(user), 0, 0)
     }
 
-    _popMessage(user) {
-        return new Promise((resolve, reject) => {
-            this.redis.lpop(this._messageQueue(user), function (err, data) {
-                if (err != null) {
-                    return reject(err);
-                } else {
-                    return resolve(data);
-                }
-            })
-        });
+    async _popMessage(user) {
+        return await this.redis.LPOP(this._messageQueue(user))
     }
 
-    _receiveFromPubSub() {
+    async _receiveFromPubSub() {
         this.pubsub.setMaxListeners(1000);
-        this.pubsub.on('message', (topic, json) => {
+
+        await this.pubsub.on('error', err => {
+            // @ts-ignore
+            logger.info('Error with Redis, broker attempting reconnect in 1s');
+            // @ts-ignore
+            logger.error(err);
+            return setTimeout(() => {
+                  return this.pubsub.subscribe(this.key, err => {
+                      // @ts-ignore
+                      if (err != null) {
+                          return logger.error('Broker could not resubscribe to Redis');
+                          // @ts-ignore
+                      } else {
+                          return logger.info("Broker resubscribed");
+                      }
+                  });
+              }
+              , 1000);
+        })
+
+        return await this.pubsub.subscribe(this.key, (messageString, channelName) => {
             // we're subscribed on only one topic, but we're all on the same redis cx
             // so we must return if the topic isn't ours
-            if (topic !== this.key) {
+            if (channelName !== this.key) {
                 return;
             }
-            const message = JSON.parse(json);
+            const message = JSON.parse(messageString);
             switch (message.type) {
                 case "dispatch":
                     return this._dispatchMessage(message.user, message.body); // dispatch message locally
@@ -230,49 +190,11 @@ class Broker extends LocalBroker {
                     // @ts-ignore
                     return logger.error("invalid message received from pubsub");
             }
-        });
-
-        return new Promise((resolve, reject) => {
-            this.pubsub.on('subscribe', (topic, count) => {
-                return resolve(count);
-            }); // we're ready now, so let's resolve
-
-            // start the subscription
-            this.pubsub.subscribe(this.key, err => {
-                if (err != null) {
-                    return reject(err);
-                }
-            }); // an error occurred, @ready will be rejected
-
-            // in case of error, we assume redis went down and subscription must be restarted
-            this.pubsub.on('error', err => {
-                // @ts-ignore
-                logger.info('Error with Redis, broker attempting reconnect in 1s');
-                // @ts-ignore
-                logger.error(err);
-                return setTimeout(() => {
-                        return this.pubsub.subscribe(this.key, err => {
-                            // @ts-ignore
-                            if (err != null) {
-                                return logger.error('Broker could not resubscribe to Redis');
-                                // @ts-ignore
-                            } else {
-                                return logger.info("Broker resubscribed");
-                            }
-                        });
-                    }
-                    , 1000);
-            })
-        });
+        })
     }
 
-    stop() {
-        return this.pubsub.unsubscribe(this.key, function (err) {
-            // @ts-ignore
-            if (err != null) {
-                return logger.error(err.message, {stack: err.stack});
-            }
-        });
+    async stop() {
+        return await this.pubsub.unsubscribe(this.key).catch(err => logger.error(err.message, {stack: err.stack}))
     }
 }
 
