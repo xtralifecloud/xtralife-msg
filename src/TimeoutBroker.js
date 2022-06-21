@@ -54,7 +54,7 @@ class TimeoutBroker extends Broker {
 		const timeout = new Date().getTime() + this.ackTimeout;
 
 		return new Promise((resolve, reject)=> {
-			this.redis.zadd(this.timeoutsKey, timeout, user, function (err, data) {
+			this.redis.zadd(this.timeoutsKey, timeout, user.toString(), function (err, data) {
 				if (err != null) {
 					return reject(err);
 				} else {
