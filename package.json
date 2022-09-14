@@ -13,7 +13,7 @@
     "url": "https://github.com/xtralifecloud/xtralife-msg.git"
   },
   "dependencies": {
-    "redis": "^4.1.0",
+    "ioredis": "^5.2.3",
     "uuid": "^8.1.0"
   },
   "devDependencies": {

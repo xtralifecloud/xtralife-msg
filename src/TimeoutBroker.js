@@ -40,8 +40,8 @@ class TimeoutBroker extends Broker {
 		this.stats.timedout = 0;
 	}
 
-	stop(){
-		super.stop();
+	async stop(){
+		await super.stop();
 		if (this._interval) { return clearInterval(this._interval); }
 	}
 
@@ -52,18 +52,18 @@ class TimeoutBroker extends Broker {
 
 	async _addTimeout(user){
 		const timeout = new Date().getTime() + this.ackTimeout;
-		return await this.redis.ZADD(this.timeoutsKey, {score: timeout, value: user})
+		return await this.redis.zadd(this.timeoutsKey, timeout, user.toString());
 	}
 
 
 	async _clearTimeout(user){
-		return await this.redis.ZREM(this.timeoutsKey, user);
+		return await this.redis.zrem(this.timeoutsKey, user.toString());
 	}
 
 	async _checkAckTimeouts(cb){
 		const expiry = Math.round(this.checkInterval/1000);
 
-		const result = await this.redis.set(this._timeoutLock(), Date.now(), {EX: expiry, NX: true}).catch(err => cb(err))
+		const result = await this.redis.set(this._timeoutLock(), Date.now(), "NX", "EX", expiry).catch(err => cb(err))
 		if (result === 'OK') {
 			// we've grabbed the lock
 			let lastTimeout = await this.redis.get(this.lastTimeoutKey).catch(err => cb(err));
@@ -71,7 +71,7 @@ class TimeoutBroker extends Broker {
 
 				const now = Date.now();
 				if ((lastTimeout !== "-inf") && (now < lastTimeout)) { return cb(null, null); }
-				const users = await this.redis.ZRANGEBYSCORE(this.timeoutsKey, lastTimeout, "(" + now ).catch(err => cb(err))
+				const users = await this.redis.zrangebyscore(this.timeoutsKey, lastTimeout, "(" + now ).catch(err => cb(err))
 			  await this.redis.set(this.lastTimeoutKey, now).catch(err => cb(err))
 
 				if (users.length === 0) {
@@ -88,18 +88,18 @@ class TimeoutBroker extends Broker {
 	_timeout(user, timeoutHandler){
 		const _prefix = this.prefix;
 		const _getMessages = async () => {
-			return await this.redis.LRANGE(this._messageQueue(user), 0, -1);
+			return await this.redis.lrange(this._messageQueue(user), 0, -1);
 		};
 
 		const _pushMessages = async messages => {
 			if (messages.length === 0) { return Promise.resolve(); }
 			const promises = [];
-			for (let message of Array.from(messages)) { promises.push(this.redis.RPUSH(this._timedoutQueue(user), message)) }
+			for (let message of Array.from(messages)) { promises.push(this.redis.rpush(this._timedoutQueue(user), message)) }
 			return await Promise.all(promises)
 		};
 
 		const _removeMessages = async count => {
-			return await this.redis.LTRIM(this._timedoutQueue(user), 0, -(count+1)).catch(err => console.log(err));
+			return await this.redis.ltrim(this._timedoutQueue(user), 0, -(count+1)).catch(err => console.log(err));
 		};
 
 
@@ -110,7 +110,9 @@ class TimeoutBroker extends Broker {
 				return _removeMessages(messages.length)
 			})
 			.then(() => {
-				return Array.from(messages).map((message) => timeoutHandler(_prefix, user, JSON.parse(message)));
+				return Array.from(messages).map((message) => {
+					timeoutHandler(_prefix, user, JSON.parse(message))
+				});
 			});
 	// @ts-ignore
 	}).catch(err => logger.error(err, {stack: err.stack}));
@@ -121,7 +123,7 @@ class TimeoutBroker extends Broker {
             redis
         } = this); }
 
-		return await redis.LLEN(this._timedoutQueue(user));
+		return await redis.llen(this._timedoutQueue(user));
 	}
 
 	_countPendingMessages(user, redis){
@@ -138,7 +140,7 @@ class TimeoutBroker extends Broker {
 	_peekMessage(user){
 
 		const _lrange = async () => {
-			return await this.redis.LRANGE(this._timedoutQueue(user), 0, 0);
+			return await this.redis.lrange(this._timedoutQueue(user), 0, 0);
 		};
 
 		return _lrange()
@@ -149,7 +151,7 @@ class TimeoutBroker extends Broker {
 
 	_popMessage(user){
 		const _lpop = async ()=> {
-			return await this.redis.LPOP(this._timedoutQueue(user));
+			return await this.redis.lpop(this._timedoutQueue(user));
 		};
 
 		return _lpop().then(async res=> {

@@ -5,7 +5,6 @@
  */
 require('mocha');
 const should = require('should');
-const Redis = require('redis');
 
 const Broker = require('../src/index.js');
 

@@ -19,7 +19,7 @@ class Broker extends LocalBroker {
         this.redis = redis;
         this.pubsub = pubsub;
         this.key = key;
-        if (this.key == null) {
+        if (!this.key) {
             this.key = "Broker:channel-" + this.prefix;
         }
         this.ready = this._receiveFromPubSub(); // @ready is a promise which will be resolved when the redis subscribe is OK
@@ -99,7 +99,7 @@ class Broker extends LocalBroker {
     // id : the promise.id from the promise returned by receive
     async cancelReceive(user, id) {
         // distribute the cancel among all brokers
-        return await this.redis.publish(this.key, JSON.stringify({type: "cancel", user, id}));
+        return this.redis.publish(this.key, JSON.stringify({type: "cancel", user, id}));
     }
 
     // get the message queue length for an array of users, returns a promise for array of integers, in the same order
@@ -107,7 +107,7 @@ class Broker extends LocalBroker {
         const multi = this.redis.multi(); // pipeline all requests
 
         for (let user of Array.from(users)) {
-            multi.LLEN(this._messageQueue(user));
+            await multi.llen(this._messageQueue(user));
         }
         return await multi.exec();
     }
@@ -123,11 +123,11 @@ class Broker extends LocalBroker {
     }
 
     async _saveMessage(user, message) {
-        return await this.redis.RPUSH(this._messageQueue(user), JSON.stringify(message)).catch(err => console.log(err));
+        return await this.redis.rpush(this._messageQueue(user), JSON.stringify(message)).catch(err => console.log(err));
     }
 
     async _publishMessage(user, message) {
-       return await this.redis.publish(this.key, JSON.stringify({
+       return this.redis.publish(this.key, JSON.stringify({
             type: 'dispatch',
             user,
             body: message
@@ -141,19 +141,36 @@ class Broker extends LocalBroker {
             } = this);
         }
 
-        return await redis.LLEN(this._messageQueue(user));
+        return await redis.llen(this._messageQueue(user));
     }
 
     async _peekMessage(user) {
-        return await this.redis.LRANGE(this._messageQueue(user), 0, 0)
+        return await this.redis.lrange(this._messageQueue(user), 0, 0)
     }
 
     async _popMessage(user) {
-        return await this.redis.LPOP(this._messageQueue(user))
+        return await this.redis.lpop(this._messageQueue(user))
     }
 
     async _receiveFromPubSub() {
         this.pubsub.setMaxListeners(1000);
+        await this.pubsub.on('message', (topic, json) => {
+            // we're subscribed on only one topic, but we're all on the same redis cx
+            // so we must return if the topic isn't ours
+            if (topic !== this.key) {
+                return;
+            }
+            const message = JSON.parse(json);
+            switch (message.type) {
+                case "dispatch":
+                    return this._dispatchMessage(message.user, message.body); // dispatch message locally
+                case "cancel":
+                    return this._localCancelReceive(message.user, message.id); // attempt local cancel receive
+                default:
+                    // @ts-ignore
+                    return logger.error("invalid message received from pubsub");
+            }
+        });
 
         await this.pubsub.on('error', err => {
             // @ts-ignore
@@ -174,23 +191,7 @@ class Broker extends LocalBroker {
               , 1000);
         })
 
-        return await this.pubsub.subscribe(this.key, (messageString, channelName) => {
-            // we're subscribed on only one topic, but we're all on the same redis cx
-            // so we must return if the topic isn't ours
-            if (channelName !== this.key) {
-                return;
-            }
-            const message = JSON.parse(messageString);
-            switch (message.type) {
-                case "dispatch":
-                    return this._dispatchMessage(message.user, message.body); // dispatch message locally
-                case "cancel":
-                    return this._localCancelReceive(message.user, message.id); // attempt local cancel receive
-                default:
-                    // @ts-ignore
-                    return logger.error("invalid message received from pubsub");
-            }
-        })
+        return await this.pubsub.subscribe(this.key);
     }
 
     async stop() {

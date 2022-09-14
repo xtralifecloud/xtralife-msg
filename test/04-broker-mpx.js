@@ -5,7 +5,7 @@
  */
 require('mocha');
 const should = require('should');
-const Redis = require('redis');
+const Redis = require('ioredis');
 
 const BrokerMpx = require('../src/index.js').MultiplexedBroker;
 const Q = require('bluebird');
@@ -34,14 +34,8 @@ describe("Broker Multiplexed", function() {
 	this.timeout(2000);
 
 	before('needs a broker instance', async function(){
-		const redis = Redis.createClient();
-		const pubsub = redis.duplicate();
-
-		await redis.connect();
-		await pubsub.connect();
-
-		broker = new BrokerMpx(redis, pubsub, toHandler, 50, 100); // check every 5ms, timeout after 10ms !
-		return broker.ready
+		broker = new BrokerMpx(new Redis(), new Redis(), toHandler, 50, 100); // check every 5ms, timeout after 10ms !
+		return broker.ready;
 	});
 
 	it('should receive then send', function(done){

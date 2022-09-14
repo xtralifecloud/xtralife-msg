@@ -6,7 +6,7 @@
 require('mocha');
 
 const should = require('should');
-const Redis = require('redis');
+const Redis = require('ioredis');
 
 const Broker = require('../src/index.js').TimeoutBroker;
 const Q = require('bluebird');
@@ -34,17 +34,10 @@ global.logger = winston.createLogger({
 describe("Broker Timeout", function () {
   this.timeout(200);
 
-  before('needs a broker instance', async function () {
-    let redis = Redis.createClient();
-    let pubsub = redis.duplicate();
-
-    await redis.connect();
-    await pubsub.connect();
-
-    broker = new Broker('testTimeout', redis, pubsub, toHandler, 1000, 1000);
-    return broker.ready
+  before('needs a broker instance',  function(done) {
+    broker = new Broker("testTimeout", new Redis(), new Redis(), toHandler, 1000, 1000);
+    broker.ready.then(() => done()).catch(err => done(err));
   });
-
 
   beforeEach('cleanup', function (done) {
     timeoutTriggered.should.eql(false);
@@ -144,7 +137,7 @@ describe("Broker Timeout", function () {
       })
   });
 
-  return after('check we left no message in the queue', () => broker.redis.LLEN("broker:testTimeout:user:timeoutuser").then(count => {
+  return after('check we left no message in the queue', () => broker.redis.llen("broker:testTimeout:user:timeoutuser").then(count => {
     count.should.eql(0);
     broker.stop();
     return broker.redis.del("broker:testTimeout:lasttimeout")

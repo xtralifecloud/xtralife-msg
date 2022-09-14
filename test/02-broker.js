@@ -8,7 +8,7 @@
 require('mocha');
 
 const should = require('should');
-const Redis = require('redis');
+const Redis = require('ioredis');
 
 const {
   Broker
@@ -34,21 +34,20 @@ global.logger = winston.createLogger({
 describe("Broker", function () {
   this.timeout(1000);
 
-  before('needs a broker instance or two', async function () {
-    const redis1 = Redis.createClient();
-    const redis2 = Redis.createClient();
-    const pubsub1 = redis1.duplicate();
-    const pubsub2 = redis2.duplicate();
+  before('needs a broker instance or two', done => {
+    let ready = 0;
+    const check = function() {
+      ready++;
+      if (ready === 2) { return done(); } // check our 2 brokers are ready
+    };
 
-    await redis1.connect();
-    await redis2.connect();
-    await pubsub1.connect();
-    await pubsub2.connect();
 
-    broker = new Broker('test', redis1, pubsub1);
-    await broker.ready;
-    broker2 = new Broker('test', redis2, pubsub2);
-    return await broker2.ready;
+    broker = new Broker("test",  new Redis(), new Redis());
+    broker.ready.then(check);
+
+    broker2 = new Broker("test",  new Redis(), new Redis());
+    broker2.ready.then(check);
+    return null;
   });
 
   beforeEach('cleanup', done => // no cleanup needed, except when developing and when tests are not clean
@@ -89,26 +88,19 @@ describe("Broker", function () {
   });
 
   it('should use prefix as a scope to publish', function (done) {
-    const client3 = Redis.createClient();
-    const duplicateClient3 = client3.duplicate();
-    client3.connect().then(() => {
-      duplicateClient3.connect().then(() => {
-        const broker3 = new Broker("othertest", client3, duplicateClient3);
-        broker3.ready.then(() => {
-          broker3.receive("prefix").then(message => // will never receive
-            should.fail(true, false));
+    const broker3 = new Broker("othertest", new Redis(), new Redis());
+    broker3.ready.then(() => {
+      broker3.receive("prefix").then(message => // will never receive
+        should.fail(true, false));
 
-          broker.receive("prefix").then(function (message) {
-            message.msg.should.eql("ok3");
-            return broker.ack("prefix", message.id).then(() => done());
-          });
+      broker.receive("prefix").then(function (message) {
+        message.msg.should.eql("ok3");
+        return broker.ack("prefix", message.id).then(() => done());
+      });
 
-          return setTimeout(() => broker.send("prefix", { msg: "ok3" })
-            , 20);
-        });
-      })
-    })
-    return null;
+      return setTimeout(() => broker.send("prefix", { msg: "ok3" })
+        , 20);
+    });
   });
 
   it('should cancel accross brokers', function (done) {
@@ -178,7 +170,7 @@ describe("Broker", function () {
   it('should let me check the message queues length', function () {
     broker.send("user", { msg: 1 });
     return broker.pendingStats(["user", "user9999999", "user"]).then(function (res) {
-      res.should.eql([1, 0, 1]);
+      res.should.eql([[null, 1], [null, 0], [null, 1]]);
 
       return broker.receive("user").then(message => // no ACK => redeliver
         broker2.ack("user", message.id).then(function () {
@@ -192,7 +184,7 @@ describe("Broker", function () {
   });
 
 
-  return after('check we left no message in the queue', async () => broker.redis.LLEN("broker:test:userNormal:userNormal").then(count => count.should.eql(0)));
+  return after('check we left no message in the queue', async () => broker.redis.llen("broker:test:userNormal:userNormal").then(count => count.should.eql(0)));
 
 });
 
