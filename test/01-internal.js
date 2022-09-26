@@ -5,14 +5,20 @@
  */
 require('mocha');
 const should = require('should');
-const Redis = require('redis');
 
 const Broker = require('../src/index.js');
 
 let broker = null;
 
 // @ts-ignore
-global.logger = require('winston');
+const winston = require('winston')
+global.logger = winston.createLogger({
+	level: 'info',
+	format: winston.format.json(),
+	transports: [
+		new winston.transports.Console(),
+	]
+});
 
 describe("local Broker", function() {
 	this.timeout(200);

@@ -6,128 +6,140 @@
 require('mocha');
 
 const should = require('should');
-const Redis = require('redis');
+const Redis = require('ioredis');
 
 const Broker = require('../src/index.js').TimeoutBroker;
 const Q = require('bluebird');
 
 let timeoutTriggered = false;
 
-const toHandler = function(prefix, user, message){
-	prefix.should.eql('testTimeout');
-	user.should.eql('timeoutuser');
-	message.msg.should.eql('oktimeout');
-	return timeoutTriggered = true;
+const toHandler = function (prefix, user, message) {
+  prefix.should.eql('testTimeout');
+  user.should.eql('timeoutuser');
+  message.msg.should.eql('oktimeout');
+  return timeoutTriggered = true;
 };
 
 let broker = null;
 // @ts-ignore
-global.logger = require('winston');
+const winston = require('winston')
+global.logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.json(),
+  transports: [
+    new winston.transports.Console(),
+  ]
+});
 
-describe("Broker Timeout", function() {
-	this.timeout(200);
+describe("Broker Timeout", function () {
+  this.timeout(200);
 
-	before('needs a broker instance', function(done){
-		broker = new Broker("testTimeout",  Redis.createClient(), Redis.createClient(), toHandler, 1000, 1000); // check every 5ms, timeout after 10ms !
-		broker.ready.then(() => done());
+  before('needs a broker instance',  function(done) {
+    broker = new Broker("testTimeout", new Redis(), new Redis(), toHandler, 1000, 1000);
+    broker.ready.then(() => done()).catch(err => done(err));
+  });
 
-		return null;
-	});
+  beforeEach('cleanup', function (done) {
+    timeoutTriggered.should.eql(false);
 
+    // no cleanup needed, except when developing and when tests are not clean
+    broker._removeFromDispatch("timeoutuser")
+    broker.redis.del("broker:testTimeout:user:timeoutuser")
+    return done();
+  });
 
-	beforeEach('cleanup', function(done){
-		timeoutTriggered.should.eql(false);
+  it('should receive then send', function (done) {
+    broker.receive("timeoutuser").then(function (message) {
+      message.msg.should.eql("ok1");
+      return broker.ack("timeoutuser", message.id);
+    }).then(function () {
+      timeoutTriggered = false;
+      return done();
+    })
 
-		// no cleanup needed, except when developing and when tests are not clean
-		//broker._removeFromDispatch "timeoutuser"
-		//broker.redis.del "broker:testTimeout:user:timeoutuser", done
-		return done();
-	});
+    broker.send("timeoutuser", { msg: "ok1" })
+    return null;
+  });
 
-	it('should receive then send', function(done){
-		broker.receive("timeoutuser").then(function(message){
-			message.msg.should.eql("ok1");
-			return broker.ack("timeoutuser", message.id);}).then(function() {
-			timeoutTriggered = false;
-			return done();}).done();
+  let _message = null;
 
-		broker.send("timeoutuser", {msg: "ok1"})
-		.done();
-		return null;
-	});
+  it('should send then receive', function (done) {
+    broker.send("timeoutuser", { msg: "ok1" });
 
-	let _message = null;
+    broker.receive("timeoutuser").then(function (message) {
+      _message = message;
+      message.msg.should.eql("ok1");
+      broker.ack("timeoutuser", message.id);
+    }).then(() => done())
+  });
 
-	it('should send then receive', function(done){
-		broker.send("timeoutuser", {msg: "ok1"});
+  it('should allow ACKing an old message', done => {
+    broker.ack("timeoutuser", _message.id)
+      .then(() => done())
+      .catch(err => done(err))
+  });
 
-		return broker.receive("timeoutuser").then(function(message){
-			_message = message;
-			message.msg.should.eql("ok1");
-			return broker.ack("timeoutuser", message.id);}).then(() => done())
-		.done();
-	});
+  const timeoutPromise = (prom, time) =>
+    Promise.race([prom, new Promise((_r, rej) => setTimeout(rej, time))]);
 
-	it('should allow ACKing an old message', done => broker.ack("timeoutuser", _message.id)
-    .then(() => done())
-    .catch(err => done(err))
-    .done());
+  it('should redeliver message if no ACK', function (done) {
+    this.timeout(2000);
+    broker.receive("timeoutuser").then(function (message) {
+      message.msg.should.eql("ok2");
+      return broker.receive("timeoutuser").then(function (message) { // no ACK => redeliver
+        message.msg.should.eql("ok2");
+        return broker.ack("timeoutuser", message.id).then(() => {
+          timeoutPromise((() => broker.receive("timeoutuser"))(), 1000).catch(() => done());
+        });
+      });
+    })
 
-	it('should redeliver message if no ACK', function(done){
-		this.timeout(2000);
-		broker.receive("timeoutuser").then(function(message){
-			message.msg.should.eql("ok2");
-			return broker.receive("timeoutuser").then(function(message){ // no ACK => redeliver
-				message.msg.should.eql("ok2");
-				return broker.ack("timeoutuser", message.id).then(() => broker.receive("timeoutuser").timeout(1000).catch(() => done()));
-			});}).done();
+    broker.send("timeoutuser", { msg: "ok2" })
 
-		return broker.send("timeoutuser", {msg: "ok2"})
-		.done();
-	});
+  });
 
-	it('should timeout very fast', function(done){
-		this.timeout(5000);
-		broker.send("timeoutuser", {msg: "oktimeout"});
+  it('should timeout very fast', function (done) {
+    this.timeout(5000);
+    broker.send("timeoutuser", { msg: "oktimeout" });
 
-		setTimeout(function(){
-			timeoutTriggered.should.eql(true);
-			timeoutTriggered = false;
+    setTimeout(function () {
+        timeoutTriggered.should.eql(true);
+        timeoutTriggered = false;
 
-			return broker.receive("timeoutuser").then(function(message){
-				message.msg.should.eql("oktimeout");
-				return broker._countPendingMessages("timeoutuser").then(function(count){
-					count.should.eql(1);
-					return broker.ack("timeoutuser", message.id).then(() => broker._countPendingMessages("timeoutuser").then(function(count){
-                        count.should.eql(0);
-                        return done();
-                    }));
-				});}).done();
-		}
-		, 3000);
-		return null;
-	});
+        broker.receive("timeoutuser").then(function (message) {
+          message.msg.should.eql("oktimeout");
+          broker._countPendingMessages("timeoutuser").then(function (count) {
+            count.should.eql(1);
+            broker.ack("timeoutuser", message.id).then(() => broker._countPendingMessages("timeoutuser").then(function (count) {
+              count.should.eql(0);
+              return done();
+            }));
+          });
+        })
+      }
+      , 3000);
+    return null;
+  });
 
-	it('should timeout without ACK, even after receive', function(done){
-		this.timeout(4000);
-		broker.send("timeoutuser", {msg: "oktimeout"}).done();
+  it('should timeout without ACK, even after receive', function (done) {
+    this.timeout(4000);
+    broker.send("timeoutuser", { msg: "oktimeout" })
 
-		return broker.receive("timeoutuser")
-		.then(function(message){
-			message.msg.should.eql("oktimeout");
-			return setTimeout(function(){
-				timeoutTriggered.should.eql(true);
-				timeoutTriggered = false;
-				return broker.ack("timeoutuser", message.id).then(() => done()).done();
-			}
-			, 3000);}).done();
-	});
+    broker.receive("timeoutuser")
+      .then(function (message) {
+        message.msg.should.eql("oktimeout");
+        setTimeout(function () {
+            timeoutTriggered.should.eql(true);
+            timeoutTriggered = false;
+            broker.ack("timeoutuser", message.id).then(() => done())
+          }
+          , 3000);
+      })
+  });
 
-	return after('check we left no message in the queue', done => broker.redis.llen("broker:testTimeout:user:timeoutuser", function(err, count){
-        count.should.eql(0);
-        broker.stop(); // TimeoutBroker must be stopped (to stop checking for timeouts)
-        return broker.redis.del("broker:testTimeout:lasttimeout", err => // clean up
-        //console.log broker.stats
-        done());
-    }));
+  return after('check we left no message in the queue', () => broker.redis.llen("broker:testTimeout:user:timeoutuser").then(count => {
+    count.should.eql(0);
+    broker.stop();
+    return broker.redis.del("broker:testTimeout:lasttimeout")
+  }));
 });

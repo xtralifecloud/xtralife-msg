@@ -5,7 +5,7 @@
  */
 require('mocha');
 const should = require('should');
-const Redis = require('redis');
+const Redis = require('ioredis');
 
 const BrokerMpx = require('../src/index.js').MultiplexedBroker;
 const Q = require('bluebird');
@@ -20,13 +20,21 @@ const toHandler = function(prefix, user, message){
 
 let broker = null;
 // @ts-ignore
-global.logger = require('winston');
+const winston = require('winston')
+const { TimeoutBroker: Broker } = require("../src");
+global.logger = winston.createLogger({
+	level: 'info',
+	format: winston.format.json(),
+	transports: [
+		new winston.transports.Console(),
+	]
+});
 
 describe("Broker Multiplexed", function() {
 	this.timeout(2000);
 
-	before('needs a broker instance', function(){
-		broker = new BrokerMpx(Redis.createClient(), Redis.createClient(), toHandler, 50, 100); // check every 5ms, timeout after 10ms !
+	before('needs a broker instance', async function(){
+		broker = new BrokerMpx(new Redis(), new Redis(), toHandler, 50, 100); // check every 5ms, timeout after 10ms !
 		return broker.ready;
 	});
 
