@@ -118,6 +118,12 @@ class TimeoutBroker extends Broker {
 	}).catch(err => logger.error(err, {stack: err.stack}));
 	}
 
+	async timedoutStats(users){
+		const multi = this.redis.multi(); // pipeline all requests
+		for (let each of Array.from(users)) { multi.llen(this._timedoutQueue(each)); }
+
+		return await multi.exec();
+	}
 	async _countTimedoutMessages(user, redis){
 		if (redis == null) { ({
             redis
