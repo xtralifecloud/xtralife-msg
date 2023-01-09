@@ -119,7 +119,7 @@ class Broker extends LocalBroker {
     }
 
     _messageQueue(user) {
-        return `broker:${this.prefix}:user:${user}`; // TODO OSS: allow ("broker") configuration instead of hardcoding
+        return `{broker:${this.prefix}:user:}${user}`; // TODO OSS: allow ("broker") configuration instead of hardcoding
     }
 
     async _saveMessage(user, message) {

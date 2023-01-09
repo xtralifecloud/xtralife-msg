@@ -124,6 +124,7 @@ class TimeoutBroker extends Broker {
 
 		return await multi.exec();
 	}
+
 	async _countTimedoutMessages(user, redis){
 		if (redis == null) { ({
             redis
@@ -169,7 +170,7 @@ class TimeoutBroker extends Broker {
 	// When messages have timedout, they're put in this queue to avoid multiple notifications to occur
 	_timedoutQueue(user){
 		// TODO OSS : allow configuration of hardcoded "broker"
-		return `broker:${this.prefix}:user.timedout:${user}`;
+		return `{broker:${this.prefix}:user.timedout:}${user}`;
 	}
 
 
