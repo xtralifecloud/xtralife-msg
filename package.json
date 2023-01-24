@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "ioredis": "^5.2.3",
-    "uuid": "^8.1.0"
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
     "@types/mocha": "*",
