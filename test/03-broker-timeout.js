@@ -21,6 +21,8 @@ const toHandler = function (prefix, user, message) {
 };
 
 let broker = null;
+let redis = null;
+let redisPubSub = null;
 // @ts-ignore
 const winston = require('winston')
 global.logger = winston.createLogger({
@@ -35,7 +37,9 @@ describe("Broker Timeout", function () {
   this.timeout(200);
 
   before('needs a broker instance',  function(done) {
-    broker = new Broker("testTimeout", new Redis(), new Redis(), toHandler, 1000, 1000);
+		redis = new Redis();
+		redisPubSub = new Redis();
+    broker = new Broker("testTimeout", redis, redisPubSub, toHandler, 1000, 1000);
     broker.ready.then(() => done()).catch(err => done(err));
   });
 
@@ -140,6 +144,9 @@ describe("Broker Timeout", function () {
   return after('check we left no message in the queue', () => broker.redis.llen("broker:testTimeout:user:timeoutuser").then(count => {
     count.should.eql(0);
     broker.stop();
-    return broker.redis.del("broker:testTimeout:lasttimeout")
+    broker.redis.del("broker:testTimeout:lasttimeout");
+		// Redis connections must be stopped in order to prevent from the test to keep stuck
+		redis.disconnect();
+		redisPubSub.disconnect();
   }));
 });

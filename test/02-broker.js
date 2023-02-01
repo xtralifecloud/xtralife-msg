@@ -21,6 +21,12 @@ const Q = require('bluebird');
 
 let broker = null;
 let broker2 = null;
+let redis = null;
+let redisPubSub = null;
+let redis2 = null;
+let redisPubSub2 = null;
+let redis3 = null;
+let redisPubSub3 = null;
 // @ts-ignore
 const winston = require('winston')
 global.logger = winston.createLogger({
@@ -41,11 +47,14 @@ describe("Broker", function () {
       if (ready === 2) { return done(); } // check our 2 brokers are ready
     };
 
-
-    broker = new Broker("test",  new Redis(), new Redis());
+    redis = new Redis();
+    redisPubSub = new Redis();
+    broker = new Broker("test", redis, redisPubSub);
     broker.ready.then(check);
 
-    broker2 = new Broker("test",  new Redis(), new Redis());
+    redis2 = new Redis();
+    redisPubSub2 = new Redis();
+    broker2 = new Broker("test", redis2, redisPubSub2);
     broker2.ready.then(check);
     return null;
   });
@@ -88,7 +97,9 @@ describe("Broker", function () {
   });
 
   it('should use prefix as a scope to publish', function (done) {
-    const broker3 = new Broker("othertest", new Redis(), new Redis());
+    redis3 = new Redis();
+    redisPubSub3 = new Redis();
+    const broker3 = new Broker("othertest", redis3, redisPubSub3);
     broker3.ready.then(() => {
       broker3.receive("prefix").then(message => // will never receive
         should.fail(true, false));
@@ -183,9 +194,16 @@ describe("Broker", function () {
     return broker.pendingStats(users).then(res => res.length.should.eql(500));
   });
 
-
-  return after('check we left no message in the queue', async () => broker.redis.llen("broker:test:userNormal:userNormal").then(count => count.should.eql(0)));
-
+  return after('check we left no message in the queue', async () => broker.redis.llen("broker:test:userNormal:userNormal").then(count => {
+    count.should.eql(0);
+		// Redis connections must be stopped in order to prevent from the test to keep stuck
+		redis.disconnect();
+		redisPubSub.disconnect();
+		redis2.disconnect();
+		redisPubSub2.disconnect();
+		redis3.disconnect();
+		redisPubSub3.disconnect();
+  }));
 });
 
 function __range__(left, right, inclusive) {

@@ -19,6 +19,8 @@ const toHandler = function(prefix, user, message){
 };
 
 let broker = null;
+let redis = null;
+let redisPubSub = null;
 // @ts-ignore
 const winston = require('winston')
 const { TimeoutBroker: Broker } = require("../src");
@@ -34,7 +36,9 @@ describe("Broker Multiplexed", function() {
 	this.timeout(2000);
 
 	before('needs a broker instance', async function(){
-		broker = new BrokerMpx(new Redis(), new Redis(), toHandler, 50, 100); // check every 5ms, timeout after 10ms !
+		redis = new Redis();
+		redisPubSub = new Redis();
+		broker = new BrokerMpx(redis, redisPubSub, toHandler, 50, 100); // check every 5ms, timeout after 10ms !
 		return broker.ready;
 	});
 
@@ -50,6 +54,9 @@ describe("Broker Multiplexed", function() {
 
 	return after('stop all at the end', function(done){
 		broker.stop(); // TimeoutBroker must be stopped (to stop checking for timeouts)
+		// Redis connections must be stopped in order to prevent from the test to keep stuck
+		redis.disconnect();
+		redisPubSub.disconnect();
 		return done();
 	});
 });
