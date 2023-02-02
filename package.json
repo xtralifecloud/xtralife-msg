@@ -29,6 +29,6 @@
   },
   "readmeFilename": "Readme.md",
   "scripts": {
-    "test": "mocha test/*.js"
+    "test": "mocha test/*.js --exit"
   }
 }
