@@ -5,7 +5,7 @@
   "author": "devteam <devteam@xtralife.cloud>",
   "license": "(C) Xtralife.cloud, 2020",
   "engines": {
-    "node": ">=v10.18.1"
+    "node": "^18.13.0"
   },
   "main": "src/index.js",
   "repository": {
