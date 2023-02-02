@@ -196,6 +196,7 @@ describe("Broker", function () {
 
   return after('check we left no message in the queue', async () => broker.redis.llen("broker:test:userNormal:userNormal").then(count => {
     count.should.eql(0);
+		broker.stop(); // TimeoutBroker must be stopped (to stop checking for timeouts)
 		// Redis connections must be stopped in order to prevent from the test to keep stuck
 		redis.disconnect();
 		redisPubSub.disconnect();
