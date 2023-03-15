@@ -9,6 +9,11 @@ jobs:
   npm_install_test:
     name: Npm - Install & Test
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:6.2.11
+        ports:
+          - 6379:6379
     steps:
       - name: Checking out repository
         uses: actions/checkout@v3
